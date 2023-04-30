@@ -1,0 +1,68 @@
+using System;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+
+namespace MyApi.Controllers
+{
+    [ApiController]
+    [Route("[controller]")]
+    public class WebhookController : ControllerBase
+    {
+        private readonly HttpClient _httpClient;
+
+        public WebhookController()
+        {
+            _httpClient = new HttpClient();
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> HandleWebhookRequestAsync(WebhookRequest request)
+        {
+            // Extract the order ID from the request parameters
+            string orderId = request.QueryResult.Parameters["order_id"];
+
+            // Make a POST request to the Order Status API to fetch the shipment date
+            string apiUrl = "https://orderstatusapi-dot-organization-project-311520.uc.r.appspot.com/api/getOrderStatus";
+            var requestBody = new { order_id = orderId };
+            var response = await _httpClient.PostAsJsonAsync(apiUrl, requestBody);
+            response.EnsureSuccessStatusCode();
+            var responseContent = await response.Content.ReadAsStringAsync();
+            var shipmentDate = JsonSerializer.Deserialize<ShipmentDateResponse>(responseContent).shipment_date;
+
+            // Create the webhook response with the shipment date
+            var fulfillmentText = $"The shipment date for order {orderId} is {shipmentDate}.";
+            var webhookResponse = new WebhookResponse { FulfillmentText = fulfillmentText };
+
+            return Ok(webhookResponse);
+        }
+    }
+
+    public class WebhookRequest
+    {
+        public QueryResult QueryResult { get; set; }
+    }
+
+    public class QueryResult
+    {
+        public string QueryText { get; set; }
+        public string LanguageCode { get; set; }
+        public Parameters Parameters { get; set; }
+    }
+
+    public class Parameters
+    {
+        public string order_id { get; set; }
+    }
+
+    public class WebhookResponse
+    {
+        public string FulfillmentText { get; set; }
+    }
+
+    public class ShipmentDateResponse
+    {
+        public string shipment_date { get; set; }
+    }
+}
